@@ -48,10 +48,25 @@ router.post("/", upload.single("file"), async (req, res) => {
 // GET all uploads for admin
 router.get('/all', async (req, res) => {
   try {
-    const upload = await Upload.find(); // Or with sorting/grouping if needed
+    const upload = await Upload.find();
     res.status(200).json(upload);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Bulk delete uploads by IDs
+router.post("/delete", async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) {
+      return res.status(400).json({ error: "Invalid payload format" });
+    }
+
+    await Upload.deleteMany({ _id: { $in: ids } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
