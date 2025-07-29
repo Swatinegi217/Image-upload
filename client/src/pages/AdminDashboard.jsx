@@ -27,15 +27,23 @@ const AdminDashboard = () => {
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchUploads = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/uploads/all");
+        const res = await axios.get("http://localhost:5000/api/uploads/all", {
+          signal: controller.signal,
+        });
         setUploads(res.data);
       } catch (error) {
-        console.error("Failed to fetch uploads:", error);
+        if (error.name !== "CanceledError") {
+          console.error("Failed to fetch uploads:", error);
+        }
       }
     };
+
     fetchUploads();
+    return () => controller.abort();
   }, []);
 
   const togglePrompt = (id) => {
@@ -53,12 +61,21 @@ const AdminDashboard = () => {
 
   const handleZipDownload = async () => {
     const zip = new JSZip();
-    const selectedUploads = uploads.filter((u) => selectedItems.includes(u._id));
+    const selectedUploads = uploads.filter((u) =>
+      selectedItems.includes(u._id)
+    );
 
     for (let item of selectedUploads) {
-      const response = await fetch(`http://localhost:5000${item.imageUrl}`);
-      const blob = await response.blob();
-      zip.file(`${item.prompt.slice(0, 15)}.jpg`, blob);
+      try {
+        const url = item.imageUrl.startsWith("http")
+          ? item.imageUrl
+          : `http://localhost:5000${item.imageUrl}`;
+        const response = await fetch(url);
+        const blob = await response.blob();
+        zip.file(`${item.prompt.slice(0, 15)}.jpg`, blob);
+      } catch (err) {
+        console.warn("Failed to fetch image for zip:", err);
+      }
     }
 
     zip.generateAsync({ type: "blob" }).then((content) => {
@@ -66,24 +83,49 @@ const AdminDashboard = () => {
     });
   };
 
-  const handlePPTDownload = async () => {
-    const pptx = new PptxGenJS();
-    const selectedUploads = uploads.filter((u) => selectedItems.includes(u._id));
+const handlePPTDownload = async () => {
+  const pptx = new PptxGenJS();
+  const selectedUploads = uploads.filter((u) =>
+    selectedItems.includes(u._id)
+  );
 
-    for (let item of selectedUploads) {
+  for (let item of selectedUploads) {
+    try {
+      const url = item.imageUrl.startsWith("http")
+        ? item.imageUrl
+        : `http://localhost:5000${item.imageUrl}`;
+      const base64Image = await toBase64(url);
+
       const slide = pptx.addSlide();
-      slide.addImage({
-        data: await toBase64(`http://localhost:5000${item.imageUrl}`),
-        x: 1,
-        y: 1,
-        w: 6,
-        h: 4,
-      });
-      slide.addText(item.prompt, { x: 1, y: 5, w: 8 });
-    }
+      slide.background = { fill: "FFFFFF" }; // Optional: white background
 
-    pptx.writeFile("images.pptx");
-  };
+      // Add image with aspect ratio containment
+      slide.addImage({
+        data: base64Image,
+        x: 0.5,
+        y: 0.5,
+        sizing: { type: "contain", w: 9, h: 5 },
+      });
+
+      // Add prompt text below image
+      slide.addText(item.prompt, {
+        x: 0.5,
+        y: 5.6,
+        w: 9,
+        h: 1,
+        fontSize: 14,
+        color: "000000",
+        wrap: true,
+      });
+
+    } catch (err) {
+      console.warn("Failed to add image to PPT:", err);
+    }
+  }
+
+  pptx.writeFile("images.pptx");
+};
+
 
   const toBase64 = async (url) => {
     const res = await fetch(url);
@@ -111,14 +153,27 @@ const AdminDashboard = () => {
 
   const filteredUploads = uploads.filter((u) => {
     const teamMatch = selectedTeam === "ALL" || u.team === selectedTeam;
-    const searchMatch = u.prompt.toLowerCase().includes(searchText.toLowerCase());
+    const searchMatch = u.prompt
+      .toLowerCase()
+      .includes(searchText.toLowerCase());
     return teamMatch && searchMatch;
   });
 
+  const groupedUploads = teams.reduce((acc, team) => {
+    acc[team] = filteredUploads.filter((u) => u.team === team);
+    return acc;
+  }, {});
+
   return (
-    <Container maxWidth="lg" sx={{ py: 4, backgroundColor: "#f9f9f9", minHeight: "100vh" }}>
+    <Container
+      maxWidth="lg"
+      sx={{ py: 4, backgroundColor: "#f9f9f9", minHeight: "100vh" }}
+    >
       <Box display="flex" flexWrap="wrap" gap={2} mb={3}>
-        <Select value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)}>
+        <Select
+          value={selectedTeam}
+          onChange={(e) => setSelectedTeam(e.target.value)}
+        >
           <MenuItem value="ALL">All Teams</MenuItem>
           {teams.map((team) => (
             <MenuItem key={team} value={team}>
@@ -168,72 +223,83 @@ const AdminDashboard = () => {
             </Typography>
             <Divider sx={{ mb: 2 }} />
             <Grid container spacing={2}>
-              {filteredUploads
-                .filter((u) => u.team === team)
-                .map((item) => {
-                  const isLong = item.prompt.length > 100;
-                  const isExpanded = expandedPrompts[item._id];
-                  const displayText =
-                    isExpanded || !isLong ? item.prompt : item.prompt.slice(0, 50) + "...";
+              {groupedUploads[team]?.map((item) => {
+                const isLong = item.prompt.length > 50;
+                const isExpanded = expandedPrompts[item._id];
+                const displayText =
+                  isExpanded || !isLong
+                    ? item.prompt
+                    : item.prompt.slice(0, 10) + "...";
 
-                  return (
-                    <Grid item xs={12} sm={6} md={3} key={item._id}>
-                      <Card
+                return (
+                  <Grid item xs={12} sm={6} md={3} key={item._id}>
+                    <Card
+                      sx={{
+                        width: "100%",
+                        position: "relative",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Box
                         sx={{
-                          width: "100%",
-                          display: "flex",
-                          flexDirection: "column",
-                          overflow: "hidden",
+                          position: "absolute",
+                          top: 8,
+                          left: 8,
+                          zIndex: 1,
                         }}
                       >
-                        <CardMedia
-                          component="img"
-                          image={`http://localhost:5000${item.imageUrl}`}
-                          alt={`Image from ${team}`}
-                          sx={{
-                            height: 180,
-                            width: "100%",
-                            objectFit: "cover",
-                            borderBottom: "1px solid #ccc",
-                          }}
+                        <Checkbox
+                          checked={selectedItems.includes(item._id)}
+                          onChange={() => handleSelect(item._id)}
+                          size="small"
                         />
-                        <CardContent sx={{ padding: 1 }}>
-                          <Box display="flex" alignItems="flex-start" gap={1}>
-                            <Checkbox
-                              checked={selectedItems.includes(item._id)}
-                              onChange={() => handleSelect(item._id)}
-                              size="small"
-                            />
-                            <Typography
-                              variant="body2"
-                              fontWeight="bold"
-                              sx={{
-                                wordWrap: "break-word",
-                                whiteSpace: "pre-wrap",
-                                fontSize: "0.85rem",
-                                maxHeight: 80,
+                      </Box>
+
+                      <CardMedia
+                        component="img"
+                        image={`http://localhost:5000${item.imageUrl}`}
+                        alt={`Image from ${team}`}
+                        sx={{
+                          height: 180,
+                          width: "100%",
+                          objectFit: "cover",
+                          borderBottom: "1px solid #ccc",
+                        }}
+                      />
+
+                      <CardContent sx={{ padding: 1 }}>
+                        <Typography
+                          variant="body2"
+                          fontWeight="bold"
+                          sx={{
+                            fontSize: "0.85rem",
+                            overflow: "hidden",
+                            wordBreak: "break-word",
+                            whiteSpace: isExpanded ? "normal" : "nowrap",
+                            textOverflow: "ellipsis",
+                            display: isExpanded ? "block" : "inline-block",
+                          }}
+                        >
+                          {displayText}
+                          {isLong && (
+                            <span
+                              style={{
+                                color: "blue",
+                                cursor: "pointer",
+                                marginLeft: 6,
+                                fontWeight: "normal",
                               }}
+                              onClick={() => togglePrompt(item._id)}
                             >
-                              {displayText}
-                              {isLong && (
-                                <span
-                                  style={{
-                                    color: "blue",
-                                    cursor: "pointer",
-                                    marginLeft: 6,
-                                  }}
-                                  onClick={() => togglePrompt(item._id)}
-                                >
-                                  {isExpanded ? " Read less" : " Read more"}
-                                </span>
-                              )}
-                            </Typography>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  );
-                })}
+                              {isExpanded ? " Read less" : " Read more"}
+                            </span>
+                          )}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
             </Grid>
           </Box>
         ))}
