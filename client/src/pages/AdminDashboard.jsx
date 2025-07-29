@@ -26,12 +26,14 @@ const AdminDashboard = () => {
   const [selectedTeam, setSelectedTeam] = useState("ALL");
   const [searchText, setSearchText] = useState("");
 
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+
   useEffect(() => {
     const controller = new AbortController();
 
     const fetchUploads = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/uploads/all", {
+        const res = await axios.get(`${BACKEND_URL}/api/uploads/all`, {
           signal: controller.signal,
         });
         setUploads(res.data);
@@ -69,7 +71,7 @@ const AdminDashboard = () => {
       try {
         const url = item.imageUrl.startsWith("http")
           ? item.imageUrl
-          : `http://localhost:5000${item.imageUrl}`;
+          : `${BACKEND_URL}${item.imageUrl}`;
         const response = await fetch(url);
         const blob = await response.blob();
         zip.file(`${item.prompt.slice(0, 15)}.jpg`, blob);
@@ -83,49 +85,45 @@ const AdminDashboard = () => {
     });
   };
 
-const handlePPTDownload = async () => {
-  const pptx = new PptxGenJS();
-  const selectedUploads = uploads.filter((u) =>
-    selectedItems.includes(u._id)
-  );
+  const handlePPTDownload = async () => {
+    const pptx = new PptxGenJS();
+    const selectedUploads = uploads.filter((u) =>
+      selectedItems.includes(u._id)
+    );
 
-  for (let item of selectedUploads) {
-    try {
-      const url = item.imageUrl.startsWith("http")
-        ? item.imageUrl
-        : `http://localhost:5000${item.imageUrl}`;
-      const base64Image = await toBase64(url);
+    for (let item of selectedUploads) {
+      try {
+        const url = item.imageUrl.startsWith("http")
+          ? item.imageUrl
+          : `${BACKEND_URL}${item.imageUrl}`;
+        const base64Image = await toBase64(url);
 
-      const slide = pptx.addSlide();
-      slide.background = { fill: "FFFFFF" }; // Optional: white background
+        const slide = pptx.addSlide();
+        slide.background = { fill: "FFFFFF" };
 
-      // Add image with aspect ratio containment
-      slide.addImage({
-        data: base64Image,
-        x: 0.5,
-        y: 0.5,
-        sizing: { type: "contain", w: 9, h: 5 },
-      });
+        slide.addImage({
+          data: base64Image,
+          x: 0.5,
+          y: 0.5,
+          sizing: { type: "contain", w: 9, h: 5 },
+        });
 
-      // Add prompt text below image
-      slide.addText(item.prompt, {
-        x: 0.5,
-        y: 5.6,
-        w: 9,
-        h: 1,
-        fontSize: 14,
-        color: "000000",
-        wrap: true,
-      });
-
-    } catch (err) {
-      console.warn("Failed to add image to PPT:", err);
+        slide.addText(item.prompt, {
+          x: 0.5,
+          y: 5.6,
+          w: 9,
+          h: 1,
+          fontSize: 14,
+          color: "000000",
+          wrap: true,
+        });
+      } catch (err) {
+        console.warn("Failed to add image to PPT:", err);
+      }
     }
-  }
 
-  pptx.writeFile("images.pptx");
-};
-
+    pptx.writeFile("images.pptx");
+  };
 
   const toBase64 = async (url) => {
     const res = await fetch(url);
@@ -139,7 +137,7 @@ const handlePPTDownload = async () => {
 
   const handleDeleteSelected = async () => {
     try {
-      await axios.post("http://localhost:5000/api/uploads/delete", {
+      await axios.post(`${BACKEND_URL}/api/uploads/delete`, {
         ids: selectedItems,
       });
       setUploads((prev) => prev.filter((u) => !selectedItems.includes(u._id)));
@@ -257,7 +255,7 @@ const handlePPTDownload = async () => {
 
                       <CardMedia
                         component="img"
-                        image={`http://localhost:5000${item.imageUrl}`}
+                        image={`${BACKEND_URL}${item.imageUrl}`}
                         alt={`Image from ${team}`}
                         sx={{
                           height: 180,
