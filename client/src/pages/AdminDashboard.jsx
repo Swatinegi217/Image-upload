@@ -255,7 +255,11 @@ const AdminDashboard = () => {
 
                       <CardMedia
                         component="img"
-                        image={`${BACKEND_URL}${item.imageUrl}`}
+                        image={
+                          item.imageUrl.startsWith("http")
+                            ? item.imageUrl
+                            : `${BACKEND_URL}${item.imageUrl}`
+                        }
                         alt={`Image from ${team}`}
                         sx={{
                           height: 180,
@@ -264,7 +268,6 @@ const AdminDashboard = () => {
                           borderBottom: "1px solid #ccc",
                         }}
                       />
-
                       <CardContent sx={{ padding: 1 }}>
                         <Typography
                           variant="body2"

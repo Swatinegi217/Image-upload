@@ -9,7 +9,7 @@ Paper,
 Grid,
 } from "@mui/material";
 import axios from "axios";
-
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const teams = ["TEAM A", "TEAM B", "TEAM C", "TEAM D", "TEAM E", "ADMIN"];
 
 const Login = () => {
@@ -17,6 +17,7 @@ const [selectedTeam, setSelectedTeam] = useState("TEAM A");
 const [email, setEmail] = useState("");
 const [password, setPassword] = useState("");
 const [error, setError] = useState("");
+
 
 const handleTeamClick = (team) => {
 setSelectedTeam(team);
@@ -26,7 +27,7 @@ const handleLogin = async (e) => {
 e.preventDefault();
 setError("");  
 try {
-  const res = await axios.post("http://localhost:5000/api/auth/login", {
+  const res = await axios.post(`${BACKEND_URL}/api/auth/login`, {
     email,
     password,
   });
@@ -43,6 +44,7 @@ localStorage.setItem('token', token);
     window.location.href = "/dashboard";
   }
 } catch (err) {
+  console.error(err); 
   setError("Invalid credentials");
 }
 };
