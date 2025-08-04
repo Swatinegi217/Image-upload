@@ -85,55 +85,75 @@ const AdminDashboard = () => {
     });
   };
 
-  const handlePPTDownload = async () => {
-    const pptx = new PptxGenJS();
-    const selectedUploads = uploads.filter((u) =>
-      selectedItems.includes(u._id)
-    );
+const handlePPTDownload = async () => {
+  const pptx = new PptxGenJS();
+  const selectedUploads = uploads.filter((u) => selectedItems.includes(u._id));
 
-    for (let item of selectedUploads) {
-      try {
-        const url = item.imageUrl.startsWith("http")
-          ? item.imageUrl
-          : `${BACKEND_URL}${item.imageUrl}`;
-        const base64Image = await toBase64(url);
+  for (let item of selectedUploads) {
+    try {
+      const url = item.imageUrl.startsWith("http")
+        ? item.imageUrl
+        : `${BACKEND_URL}${item.imageUrl}`;
+      const base64Image = await toBase64(url);
 
-        const slide = pptx.addSlide();
-        slide.background = { fill: "FFFFFF" };
+      // Create temporary image element to get dimensions
+      const img = new Image();
+      img.src = url;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
 
-        slide.addImage({
-          data: base64Image,
-          x: 0.5,
-          y: 0.5,
-          sizing: { type: "contain", w: 9, h: 5 },
-        });
+      const slide = pptx.addSlide();
+      slide.background = { fill: "FFFFFF" };
 
-        slide.addText(item.prompt, {
-          x: 0.5,
-          y: 5.6,
-          w: 9,
-          h: 1,
-          fontSize: 14,
-          color: "000000",
-          wrap: true,
-        });
-      } catch (err) {
-        console.warn("Failed to add image to PPT:", err);
+      // Calculate dimensions to maintain aspect ratio
+      const slideWidth = 10; // Slide width in inches
+      const slideHeight = 5.63; // Slide height in inches
+      const maxWidth = 9; // Max image width
+      const maxHeight = 5; // Max image height
+      
+      const aspectRatio = img.width / img.height;
+      let imgWidth, imgHeight;
+
+      if (aspectRatio > 1) {
+        // Landscape image
+        imgWidth = Math.min(maxWidth, slideWidth - 1);
+        imgHeight = imgWidth / aspectRatio;
+      } else {
+        // Portrait image
+        imgHeight = Math.min(maxHeight, slideHeight - 1);
+        imgWidth = imgHeight * aspectRatio;
       }
+
+      // Center the image on the slide
+      const xPos = (slideWidth - imgWidth) / 2;
+      const yPos = (slideHeight - imgHeight) / 2;
+
+      slide.addImage({
+        data: base64Image,
+        x: xPos,
+        y: yPos,
+        w: imgWidth,
+        h: imgHeight,
+      });
+
+    } catch (err) {
+      console.warn("Failed to add image to PPT:", err);
     }
+  }
 
-    pptx.writeFile("images.pptx");
-  };
+  pptx.writeFile("images.pptx");
+};
 
-  const toBase64 = async (url) => {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    return await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(blob);
-    });
-  };
+const toBase64 = async (url) => {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+};
 
   const handleDeleteSelected = async () => {
     try {
